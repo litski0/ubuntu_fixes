@@ -1,0 +1,69 @@
+# GNOME Broken Screen Bypass: The "Bait and Switch" Method
+
+> **MASSIVE SHOUTOUT:** The core logical exploit for this workaround was sourced directly from [this Reddit post on r/archlinux](https://www.reddit.com/r/archlinux/comments/k5l9ox/using_xrandr_to_block_out_part_of_my_screen/).
+
+## The Architectural Bottleneck
+When dealing with a physically damaged LCD (e.g., a dead zone on the left edge), standard X11 matrix transformations (`xrandr --transform`) fail on the GNOME desktop environment. The GNOME Mutter compositor extracts its UI geometry (top bar, dock, maximize boundaries) strictly from the active hardware Mode (CRTC broadcast signal), actively ignoring X11 logical FrameBuffer (`--fb`) limits. 
+
+If you attempt a simple matrix shift, GNOME will push the healthy right side of your UI completely off the physical silicon.
+
+## The Logical Solution
+To bypass Mutter's rendering rules, you must decouple the Window Manager's geometry from the hardware's geometry using a two-stage exploit:
+1. **The Spoof:** Generate a fake, smaller display mode matching your healthy screen area. Force GNOME to adopt it, causing it to shrink its UI to fit the new box.
+2. **The Hardware Swap:** In a single clock cycle, revert the hardware to the native, full-width resolution (to prevent aspect ratio stretching) while simultaneously applying the pixel shift. GNOME remains unaware of the hardware swap and keeps the UI correctly sized.
+
+---
+
+## Deployment Steps
+
+**Assumptions for this configuration:**
+* **Native Resolution:** `1920x1080`
+* **Broken Area:** `480` pixels (Left edge)
+* **Healthy Target Resolution:** `1440x1080` (1920 - 480)
+* **Display Output:** `eDP-1` *(Verify yours via `xrandr | grep " connected"`)*
+
+### 1. Generate the Mathematical Modeline
+Calculate the raw VESA timing data for your target safe zone.
+```bash
+cvt 1440 1080
+```
+*Extract the data string after the word `Modeline`. Example:*
+`"1440x1080_60.00" 129.50 1440 1536 1688 1936 1080 1083 1087 1115 -hsync +vsync`
+
+### 2. Inject the Custom Mode into X11
+Declare the new fake mode using the extracted data string. (We will name it `1440x1080_fix`).
+```bash
+xrandr --newmode "1440x1080_fix" 129.50 1440 1536 1688 1936 1080 1083 1087 1115 -hsync +vsync
+```
+Bind the fake mode to your physical display output:
+```bash
+xrandr --addmode eDP-1 "1440x1080_fix"
+```
+
+### 3. Purge Residual States
+Clear any active matrices or virtual monitors to establish a zero-point coordinate plane.
+```bash
+xrandr --output eDP-1 --transform none --fb 1920x1080
+```
+
+### 4. Stage 1: The Spoof
+Force GNOME to adopt the smaller display mode. 
+*Note: The screen will stretch horizontally. This is mathematically expected behavior. Do not abort.*
+```bash
+xrandr --output eDP-1 --mode "1440x1080_fix" --fb 1440x1080 --panning 1440x1080
+```
+
+### 5. Stage 2: The Hardware Swap & Shift
+Execute the matrix transformation and hardware swap in a single command. This returns the hardware to 1920x1080 (fixing the stretch), shifts the physical zero-point 480 pixels right, and locks the FrameBuffer.
+```bash
+xrandr --output eDP-1 --mode 1920x1080 --transform 1,0,-480,0,1,0,0,0,1 --fb 1440x1080 --panning 1920x1080
+```
+
+---
+
+## Future Independence: Core Engineering Principles
+If you encounter UI layout conflicts in Linux desktop environments, trace the "Source of Truth" for the failing component.
+* `xrandr --transform` dictates the X Server's raw pixel mapping.
+* `xrandr --mode` dictates the hardware truth presented to the Window Manager.
+
+When a monolithic compositor (like GNOME Mutter) refuses to respect spatial constraints from lower-level software flags, you must manipulate the hardware mode directly to establish a new mathematical truth for the compositor before altering the rendering matrix beneath it.
