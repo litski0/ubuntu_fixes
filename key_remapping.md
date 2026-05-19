@@ -49,3 +49,35 @@ xmodmap -pke > ~/.Xmodmap
 
 ## Future Independence: Core Engineering Principles
 When chaining key reassignments, never map a target to a key that is currently bound to an active modifier array. By running `clear mod1` at the absolute beginning, you destroy the array structure entirely, giving you a clean mathematical slate to manipulate the `keysym` values without the X server misinterpreting your inputs. Always rebuild the array (`add mod1 = ...`) as the absolute final step in the execution chain.
+
+## Future changes 
+```
+xmodmap -e "clear mod1"
+xmodmap -e "remove mod4 = Super_L"
+xmodmap -e "keysym Alt_L = space"
+xmodmap -e "keysym Super_L = Alt_L"
+xmodmap -e "add mod1 = Alt_L Alt_R Meta_R"
+xmodmap -pke > ~/.Xmodmap
+```
+
+new remapping 
+```
+xmodmap -e "clear mod1"
+xmodmap -e "clear mod4"
+xmodmap -e "remove mod4 = Super_L"
+xmodmap -e "keycode 64 = space space space space"
+xmodmap -e "keycode 133 = Alt_L Meta_L Alt_L Meta_L"
+xmodmap -e "add mod1 = Alt_L Meta_L"
+xmodmap -pke > ~/.Xmodmap
+```
+this worked
+```
+xmodmap -e "clear mod1"
+xmodmap -e "clear mod4"
+xmodmap -e "keycode 64 = space space space space"
+xmodmap -e "keycode 133 = Alt_L Meta_L Alt_L Meta_L"
+xmodmap -e "add mod1 = Alt_L Meta_L"
+xmodmap -pke > ~/.Xmodmap
+
+
+```
